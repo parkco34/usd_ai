@@ -1,18 +1,19 @@
 # Byte-compiled / optimized / DLL files
 
-# Local venv in project root
-bin/
-include/
-pyvenv.cfg
+/bin/
+/include/
+/lib/
+/pyvenv.cfg
+
+
+.DS_Store
+share/
+Pipfile
+Pipfile.lock
 
 # Ignore all nested .gitignore files, keep root one tracked
-.gitignore
-# ----------------------------
-# Ignore nested .gitignore files, but keep the root one tracked
-# ----------------------------
 **/.gitignore
 !/.gitignore
-
 
 __pycache__/
 *.py[codz]
@@ -29,7 +30,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
