@@ -1,9 +1,11 @@
 # Byte-compiled / optimized / DLL files
 
-/bin/
-/include/
-/lib/
-/pyvenv.cfg
+# venv artifacts anywhere (recursive)
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
 
 
 .DS_Store
