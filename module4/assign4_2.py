@@ -7,13 +7,4 @@ the likelihood function.
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Random seed for reproducibility
-rng = np.random.default_rng(73)
-
-# First success at y=3
-k = 3
-
-# Likelihood function
-L = rng.geometric(1/3, size=None)
-
 
