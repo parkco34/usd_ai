@@ -68,7 +68,6 @@ print(f"\nNumber of duplicated rows: {df.duplicated().sum()}")
 plt.figure(figsize=(10 , 6))
 ax = plt.gca()
 
-# ======================+++++++====================
 fig, axes = plt.subplots(2, 2, figsize=(10, 6))
 axes = axes.ravel()  # flatten to 1D for easy indexing
 

@@ -1,0 +1,49 @@
+Discussion Criteria:
+Cite resources and references appropriately in APA format.
+
+Choose an AI or machine learning problem from your work, studies, personal life, or something you have seen in the news where a regression model could be helpful. This can include both linear regression for numeric predictions or logistic regression for yes or no outcomes.
+
+Describe which assumptions from the lesson would be important to verify for your chosen AI problem. For example, would a linear relationship between the predictors and the outcome make sense? Would the predictors you plan to use be meaningful for the model? If using logistic regression, would the outcome naturally fit a binary classification setting? Explain why these assumptions matter for the AI system you have in mind.
+
+
+
+
+ME:
+Logistic Regression in Predicting PTSD Treatment Response
+An interesting topic I thought of was using regression modeling to predict if a patient with PTSD responds well to a certain kind of therapy, where the treatment response would be whether the patient was improving or not, binary.  In this case, we would opt to use Logistic Regression.  The model:
+, where .
+
+The predictors could be baseline PTSD intensity, time since the event that caused the overall symptoms of PTSD, major depressive disorder, and whether the individual had support (family, friends, a Bengal cat, a lifetime worth of Pho from your favorite Vietnamese restaurant,  etc.). Logistic Regression models the log-odds of success, where the predicted probabilities have bounds in [0, 1], unlike Ordinary Least Squares.
+
+
+
+
+Assumptions
+
+
+PTSD symptoms are continuous, but logistic regression is useful when the AI intends to guide support in determining whether the treatment was clinically meaningful or not.  You'd need to use a linear model based on continuous target variable(s) in order to properly analyze such outcomes.
+
+
+
+
+Since logistic regression assumes linearity in the log-odds, each unit increase in the explanatory variable(s) results in the odds of recovery as a multiple of , and if the true relationship is non-linear, we still don't have to abandon logistic regression.  Using the Generalized Linear Models (GLM), we can add polynomial terms and interaction terms to model the non-linear effects.  
+
+
+
+
+Independence of observations have to be analyzed since correlations with a patient's therapists can inflate the significance,  resulting from standard errors being underestimated.  Using logistic regression extensions like mixed-effects (multilevel) logistic models, we can allow random effects for therapists, modeling correlation within clustered observations (Agresti & Kateri, 2022).  This would maintain the GLM framework while dealing with the potential dependencies.  
+
+
+
+
+Predictors also need to be meaningful, whereas if they were highly correlated, the variance of coefficient estimates would increase resulting in a decrease in interpretability.  Variance inflation factors (VIFs) can be used to analyze multicollinearity (Agresti & Kateri, 2022).  We of course need a proper sample size, where logistic regression needs enough events per variable in order to avoid overfitting.  
+
+
+
+
+References
+
+Agresti, A., & Kateri, M. (2022). Foundations of statistics for data scientists: With R and Python. Chapman and Hall/CRC. https://doi.org/10.1201/9781003159834
+
+
+
