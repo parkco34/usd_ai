@@ -33,20 +33,20 @@ def read_file(path):
 
         return None
 
-
 def sample_mean(var):
     """
     Returns the mean of the input variable (sample mean in this case).
     """
     # INput validation
     if not isinstance(var, pd.Series):
-        raise("Input not valid\nNot a pandas Series")
+        raise TypeError("Input must be a pandas Series!")
 
     return var.mean()
 
 def sample_stats(x, y):
     """
-    Computes the sample means and samples standard deviations.
+    Computes the sample means and sample standard deviations, sample
+    covariance, 
     ---------------------------------------------
     INPUT:
         x: (pd.Series)
@@ -104,7 +104,13 @@ def correlation(Sxx, Sxy, Syy):
     OUTPUT:
         r: (np.float) Correlation
     """
-    return Sxy / np.sqrt(Sxx * Syy)
+    # Division by zero case
+    if np.sqrt(Sxx * Syy) != 0:
+        return Sxy / np.sqrt(Sxx * Syy)
+
+    else:
+        print("Cannot divide by zero!")
+        return None
 
 # ======= MAIN ===========
 df = read_file("./firearms.dat")
@@ -132,6 +138,14 @@ x_line = np.linspace(X.min(), X.max(), 200)
 # Line to go on scatterplot
 y_line = b0 + b1 * x_line
 
+# Highlight outlier (largest firearms value)
+outlier = df.loc[df["firearms"].idxmax()]
+
+plt.scatter(outlier["firearms"],
+            outlier["murder_rates"],
+            color="red",
+            s=200)
+
 # Plotting
 plt.plot(x_line, y_line, linewidth=2)
 
@@ -142,22 +156,38 @@ plt.show()
 
 # Outlier observation
 print(dedent(f"""
-The {df.max().iloc[0]} is the outlier of the {df.shape[0]} 
+The {outlier["Nation"]} is the outlier of the {df.shape[0]} 
 advanced industrial nations with {X.max()} firearms per 
-100 people and {y.max()} murders for a population of a million people.
+100 people and {outlier["murder_rates"]} murders for a population of a million people.
+
+WIth a sample size of only {len(df)}, a single outlier like the US
+will strongly influence the correlation and regression fit.
              """))
 
 # b) Correlation with and without outlier
 # With outlier
 corr = correlation(sxx, sxy, syy)
 
+# Outlier narrative
+x, y = outlier["firearms"], outlier["murder_rates"]
+
 # Interpretation
 print(dedent(f"""
 INTERPRETATION
 --------------
-1) With the outlier ({df.max().iloc[0]}),
+With the outlier ({outlier["Nation"]}),
 the correlation is {corr:.3f}.
-This is interesting, given that the outlier is so far outside the majority of observations it is.  You'd think it would be A LOT closer to 1.
+This is interesting, given that the outlier is so far outside the majority of
+observations. You'd think it would be A LOT closer to 1.
+
+Since, for the US, the firearms (per 100 people) {x} and 
+the murder rate (per million population) {y} are relatively so large,
+the term in the numerator (Covariance) raises the correlation to such an extent that
+it influences the analysis drastically.
+
+Geometrcially, the correlation can be shown as r = cos(theta), where theta is
+the angle between xi - x_bar and yi - y_bar.  The US rotates the direction of
+the x-vector profoundly.
              """))
 
 # Dataframe without outlier
@@ -174,15 +204,6 @@ b0_nous, b1_nous = linear_fit(x2_bar, y2_bar, sxx2, sxy2)
 
 # Correlation without US
 corr_nous = correlation(sxx2, sxy2, syy2)
-
-# Interpretation via the difference between w/ outlier and without
-print(dedent(f"""
-Without the outlier {df.max().iloc[0]}, the correlation
-is now {corr_nous:.3f}!
-That is, the correlation without the US is NEGATIVE, which means
-that the more firearms advanced nation's (otherthan the US) citizens possess,
-the lower the murder rate!!
-             """))
 
 # c) Fitting the linear regression model without the outlier
 X_line2 = np.linspace(X2.min(), X2.max(), 200)
@@ -201,8 +222,35 @@ plt.xlabel("Number of Firearms (per 100 people)")
 plt.ylabel("Murder Rates (per million population)")
 plt.show()
 
-# Interpretaion
+# Comparison of outlier influence
+delt_b0 = b0 - b0_nous
+delt_b1 = b1 - b1_nous
+
+# Interpretation via the difference between w/ outlier and without
 print(dedent(f"""
+WITH outlier (US included):
+    y_hat = b0 + b1 * x
+    y_hat = {b0:.2f} + {b1:.2f} * x
 
+WITHOUT outlier (US removed):
+    y_hat = b0_noUS + b1_noUS * x
+    y_hat = {b0_nous:.2f} + {b1_nous:.2f} * x
+
+Without the outlier {outlier["Nation"]}, the correlation
+is now {corr_nous:.2f}!
+y_hat = {b0:.2f}
+
+Change in intercept:  delta_b0 = b0 - b0_noUS = {delt_b0:.2f}
+Change in slope:      delta_b1 = b1 - b1_noUS = {delt_b1:.2f}
+
+That is, the correlation without the US is NEGATIVE, which means
+that the more firearms advanced nation's (otherthan the US) citizens possess,
+the lower the murder rate!!      (>▽<)
+
+An observation is influential if the removing it largely changes the slope,
+intercept, or correlation.
+The US in this case has an extreme x value and large cross-product Sxy.
+
+Thus, correlation and least squares regression do not seem to be robust, given
+this problem.
              """))
-

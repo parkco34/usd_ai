@@ -43,7 +43,7 @@ def sample_mean(var):
     """
     # INput validation
     if not isinstance(var, pd.Series):
-        raise("Input not valid\nNot a pandas Series")
+        raise TypeError("Input not valid\nNot a pandas Series")
 
     return var.mean()
 
@@ -130,22 +130,67 @@ sns.scatterplot(data=df, x="day", y="cases", ax=ax1)
 ax1.set(title="Number of Covid-19 cases in U.S.", xlabel="Day", ylabel="Number of Cases")
 
 # Plot 2
-sns.scatterplot(data=df, x="day", y=log_y, ax=ax2)
+sns.scatterplot(x=X, y=log_y, ax=ax2)
 ax2.set(title="Number of Covid-19 cases in U.S.", xlabel="Day", ylabel="log(Number of Cases)")
 
 plt.tight_layout()
 plt.show()
 
 # b) ====== Correlation and interpretation ========
+# Sample stats
+x_bar, y_bar, sxx, sxy, syy  = sample_stats(X, y)
+x_bar_log, y_bar_log, sxx_log, sxy_log, syy_log  = sample_stats(X, log_y)
+
+# Correlation for each case
+corr1 = correlation(sxx, sxy, syy)
+corr2 = correlation(sxx_log, sxy_log, syy_log)
 
 
+print(dedent(f"""
+---------------
+INTERPRETATION
+---------------
+The correlation of original y: {corr1:.3f} and the correlation for
+the log(y) is {corr2:.3f}.
+This shows that the linear correlation underestimates the true strength of the
+association between the number of days Covid has been actively circulating
+through the given population and the number of cases reported.
 
+The correlation is much closer to 1 after doing a log-transformation to the
+exponential function, getting a linear relationship as shown by the scatter
+plots.
+             """))
 
+# c) Linear Fit and prediction equation
+b0_log, b1_log = linear_fit(x_bar_log, y_bar_log, sxx_log, sxy_log)
 
+# Set white background with black grid
+sns.set_style("whitegrid", {'grid.color': 'black'})
+sns.scatterplot(x=X, y=log_y)
 
+# Fitted line: y_hat = b0 + b1 * x (over 200 evenly spaced values)
+x_line = np.linspace(X.min(), X.max(), 200)
+# Line to go on scatterplot
+y_line_log = b0_log + b1_log * x_line
 
+# Plotting
+plt.plot(x_line, y_line_log, linewidth=2)
+plt.title("Log(Number of Cases) by Day")
+plt.xlabel("Day")
+plt.ylabel("log(Cases)")
+plt.show()
 
+# Growth factor (exponential)
+growth_factor = np.exp(b1_log)
+print(f"Each additional day multiplies predicted cases by {growth_factor:.2f}.")
 
+# Prediction equation
+print(f"log(y_hat) = {b0_log:.2f} + {b1_log:.4f}x")
+print(f"exp(beta1) = {np.exp(b1_log):.2f}")
 
-
+pct_increase = (np.exp(b1_log) - 1) * 100
+print(dedent(f"""
+Thus, the model predicts a {pct_increase:.2f}% increase in cases per day
+during the initial exponential growth phase.
+"""))
 
