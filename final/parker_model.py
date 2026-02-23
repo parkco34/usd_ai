@@ -6,12 +6,12 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score, cross_val_predict
 from sklearn.metrics import (
-    accuracy_score, 
-    f1_score, 
-    precision_score, 
-    recall_score, 
-    roc_auc_score, 
-    classification_report, 
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    classification_report,
     average_precision_score,
     confusion_matrix,
     precision_recall_curve,
@@ -49,9 +49,13 @@ def eval_classifier(y_true, y_hat, y_prob, label=""):
     Computes classification metrics for binary classification.
     --------------------------------------------------------
     INPUT:
+        y_true: (np.ndarray) True binary labels
+        y_hat: (np.ndarray) Predicted labels (0/1)
+        y_prob: (np.ndarray) Predcited probabilities for positive class (1). USed for ROC-AUC
+        label: (str) Label for classification report
 
     OUTPUT:
-
+        metrics (dict) Accuracy, F1, precision, recall, and roc_auc
     """
     accuracy = accuracy_score(y_true, y_hat)
     f1 = f1_score(y_true, y_hat)
@@ -83,17 +87,18 @@ def eval_classifier(y_true, y_hat, y_prob, label=""):
 
 def cv_threshold(model, X_train, y_train, cv, mode="max_f1", min_recall=0.95):
     """
-    Chooses decision threshold on training data via Cross-validation predicted probabilitiess
-    ------------------------------------------------S
+    Chooses decision threshold on training data via Cross-validation predicted probabilities.
+    ------------------------------------------------
     INPUT:
         model: (sklearn) Estimator
         X_train, y_train: (pd.Series) Training data.
-        cv: (StratifiedKFold) Cross-validation
+        cv: (StratifiedKFold) Cross-validation splitter
         mode: (str) default: 'max_f1' Chooses threshold to maximize F1
-        min_recall: (float) Only used when mode="min_recall" ?
+        min_recall: (float) Only used when mode="min_recall" (default=0.95)
+
     OUTPUT:
         best_t: Threshold w/in [0,1]
-        df_curve: (pd.DataFrame) dataframe with threshold metrics
+        df_curve: (pd.DataFrame) Treshold-metric table with columns as "threshold", "precision", "recall", "F1"
     """
     # Cross-validated probabilities
     y_prob_cv = cross_val_predict(
@@ -109,7 +114,7 @@ def cv_threshold(model, X_train, y_train, cv, mode="max_f1", min_recall=0.95):
     thresholds = np.linspace(0.01, 0.99, 99)
 
     rows=[]
-    # Iterating thru ?
+    # Iterating thru thresholds
     for t in thresholds:
         y_hat_t = (y_prob_cv >= t).astype(int)
         rows.append({
@@ -119,7 +124,7 @@ def cv_threshold(model, X_train, y_train, cv, mode="max_f1", min_recall=0.95):
             "f1": f1_score(y_train, y_hat_t, zero_division=0)
         })
 
-    # ?
+    # Assemble threshold sweep into DataFrame for easy plotting
     df_curve = pd.DataFrame(rows)
 
     if mode == "max_f1":
@@ -138,7 +143,7 @@ def cv_threshold(model, X_train, y_train, cv, mode="max_f1", min_recall=0.95):
         else:
             best_row = feasible.loc[feasible["precision"].idxmax()]
             best_t = float(best_row["threshold"])
-    
+
     else:
         raise ValueError("Mode must be 'max_f1' or 'min_recall'")
 
@@ -212,7 +217,7 @@ def feature_select(features):
 
     # Output features used
     print(f"Features: X.columns=  {X.columns}")
-    
+
     return X, y
 
 def feature_corr(X, y):
@@ -271,7 +276,23 @@ def cv_auc_score(
     scoring="roc_auc"
 ):
     """
-    ?
+    Fits Random Forest on training set, reports out-of-bag (OOB) score, then estimates generalization via Stratified K-Fold cross-validation.
+    Chooses probability thresholds using CV predicted probabilities for best F1 and best Recall.
+    -------------------------------------------------------
+    INPUT:
+        model_obj: (sklearn.ensemble._forest.RandomForestClassifier) Random Forest Classifier model object
+        X_train: (pd.DataFrame) Training data
+        y_train: (pd.Series) Target training data
+        n_splits: (int) Number of CV folds (default=5)
+        scoring: (str) sklearn scoring name (default="roc_auc")
+
+    OUTPUT:
+        cv_auc: (np.ndarray) Length of n_splits array of CV scores.
+        best_t_f1: (float) Threshold maximizes F1 on CV predictions
+        curve_f1: (pd.DataFrame) Threshold metrics for max_f1 mode
+        best_t_recall: (float) Threshold selected under recall
+        curve_recall: (pd.DataFrame) Threshold metrics for min_recall mode
+        
     """
     # Build ze trees wiz ze training data
     model_obj.fit(X_train, y_train)
@@ -281,9 +302,11 @@ def cv_auc_score(
 
     # Cross-validation AUC
     cv = StratifiedKFold(
-        # ?
+        # NUmber of folds; preserving class proportions in each fold
         n_splits=n_splits,
+        # Shuffles each class's samples prior to splitting
         shuffle=True,
+        # Random seed for reproducibliity
         random_state=73
     )
 
@@ -292,7 +315,9 @@ def cv_auc_score(
         model_obj,
         X_train,
         y_train,
+        # Evaluate performance of estimator across splits
         scoring=scoring,
+        # Splitting strategy chosen
         cv=cv,
         # USing all CPU cores
         n_jobs=-1
@@ -328,37 +353,49 @@ def cv_auc_score(
     print(f"Best threshold (F1): {best_t_f1:.2f}")
     print(f"best threshold (Recall): {best_t_recall:.2f}")
 
+    return cv_auc, best_t_f1, curve_f1, best_t_recall, curve_recall
+
 def make_predictions(model, X_test, y_test):
     """
-    ?
+    Probability predictions on the test set, then evaluates thhree decision rules:
+        1) Default threshold (t=1/2)
+        2) Threshold for Max F1
+        3) Threshold for Min Recall
+
+    --> This function uses global variables (best_t_f1, best_t_recall) defined in main area
+    ------------------------------------------------
+    INPUT:
+        model: (sklearn.ensemble._forest.RandomForestClassifier) Must be fitted
+        already on training data.
+        X_test: (pd.DataFrame) Test data
+        y_test: (pd.Series) Target test data
+
+    OUTPUT:
+        y_prob: (np.ndarray) Positive-class probs for test set
+        y_hat: (np.ndarray) Predictions using t=1/2
+        y_hat_f1: (np.ndarray) Predictions using MAx F1
+        y_hat_recall: (np.ndarray) Predications using Min Recall
     """
     # Predict class probabilities, returning an array of shape (n_samples,
     # n_classes), where we care about CLASS, hence the [:,1]
     y_prob = model.predict_proba(X_test)[:, 1]
 
-    # Evaluating default threshold (1/2)
     # Converting array of boolean values to 0/1 with astype(int)
     y_hat = (y_prob >= 0.50).astype(int)
-    
-    # Evaluating Max F1
-    y_hat_f1 = (y_prob >= best_t_f1).astype(int)
-    eval_classifier(yrf_test, y_hat_f1, y_prob, label=f"Random Forest (Max F1) = {best_t_f1:.2f}")
-
-    # Evaluate @ min_recall
-    y_hat_rec = (y_prob >= best_t_recall).astype(int)
-    eval_classifier(yrf_test, y_hat_rec, y_prob, label=f"Random Forest (threshold = {best_t_recall:.2f}, picked by CV recall>=0.95)")
-
-    # PLotting
-    plot_roc(yrf_test, y_prob, title="Random Forest (Test)")
 
 # ====== Significance Testing ==========
 def sig_test(
-    cv_auc, 
-    mu0=0.50, 
-    alpha=0.05, 
+    cv_auc,
+    mu0=0.50,
+    alpha=0.05,
     model="Random Forest"):
     """
-    What it does and how, including datatypes?
+    One-sided Z-test via Normal Approx. for whether mean CV ROC-AUC goes beyond chance.
+    Hypothesese:
+        H0 -> E[AUC] = mu0 (1/2 for random guessing)
+        H1 -> E[AUC] > mu0
+
+    Treats the fold scores as an Independent and identically distributed sample with mean E[AUC].
     ------------------------------------------
     INPUT:
         cv_auc: (np.ndarray) ROC-AUC scores from 5-fold StratifiedKFOld
@@ -403,141 +440,36 @@ Reject Null Hypothesis
 {model} doesn't provide sufficient evidence that it does better than chance.   ( ͡ಥ ͜ʖ ͡ಥ)
                      """))
 
-
-
 # ===== MAIN ======
 df = read_file("data/lung_cancer.csv")
+
+breakpoint()
 
 # Target and features
 # Confounding features: pack_years = (cigs_per_day/20) * smoking_years
 X,y = feature_select(['age','pack_years','copd','family_history_cancer','chronic_cough', 'shortness_of_breath', 'oxygen_saturation'])
 
-# Splitting data into train/test sets
-Xrf_train, Xrf_test, yrf_train, yrf_test = train_test_split(
-    X_rf,
-    y_rf,
-    test_size=0.2, # for 20/80 test/train split
-    random_state=73, # Random seed for reproducibility
-    stratify=y_rf # deals with class imbalance
-)
+# Split data into train/test sets
+X_train, X_test, y_train, y_test = data_split(X, y)
 
-print(f"\nTraining set: {Xrf_train.shape[0]} samples")
-print(f"Test set: {Xrf_test.shape[0]} samples")
-print(f"Class balance:")
-print(yrf_train.value_counts(normalize=True))
+# Output Feature correlations
+feature_corr(X, y)
 
 # Fitting Random Forest Classifier
 # Unlike Logistic Regression, scaling is NOT required because trees split on thresholds so feature magnitudes don't affect the splits.
 forest = rf_model()
 
-# Build trees using training data
-forest.fit(Xrf_train, yrf_train)
+# Output Cross-validation AUC results w/ results returned just because  ¯\_( ͡° ͜ʖ ͡°)_/¯
+cv_auc, best_t_f1, curve_f1, best_t_recall, curve_recall = cv_auc_score(forest, X_train, y_train)
 
-# Output Out-of-bag score
-print(f"\nOOB Score: {forest.oob_score_:.3f}")
-
-# Cross-validation AUC
-cv = StratifiedKFold(
-    n_splits=5,
-    shuffle=True,
-    random_state=73
-)
-
-cv_auc = cross_val_score(
-    forest, 
-    Xrf_train,
-    yrf_train,
-    scoring="roc_auc",
-    cv=cv,
-    n_jobs=-1
-)
-
-print("\nCross-validation ROC-AUC:")
-print(f"mean={cv_auc.mean():.3f}")
-print(f"std={cv_auc.std():.3f}")
-print(f"scores={np.round(cv_auc, 3)}")
-
-# Choose threshold  using Cross-validation
-best_t_f1, curve_f1 = cv_threshold(
-    rf_model(random_state=73),
-    Xrf_train,
-    yrf_train,
-    cv=cv,
-    mode="max_f1"
-)
-
-best_t_recall, curve_recall = cv_threshold(
-    rf_model(random_state=73),
-    Xrf_train,
-    yrf_train,
-    cv=cv,
-    mode="min_recall",
-    min_recall=0.95
-)
-
-# Ouptut results
-print("\nThreshold selection via Cross-validation:")
-print(f"Best threshold (F1): {best_t_f1:.2f}")
-print(f"best threshold (Recall): {best_t_recall:.2f}")
-
-# Predict class of input sample, where the predicted class is one w/ highest mean probability estimate across trees
-y_hat = forest.predict(Xrf_test)
-
-# Predicted class probabilities, returns an array of shape: (n_samples, n_classes), where we care about the CLASS, hence the [:,1]
-y_prob = forest.predict_proba(Xrf_test)[:, 1]
-
-# Evaluate @ default threshold (1/2)
-# Converting array of boolean values to 1s and 0s
-y_hat_default = (y_prob >= 0.50).astype(int)
-eval_classifier(yrf_test, y_hat_default, y_prob, label=f"Random Forest (threshold (1/2)= {best_t_f1:.2f})")
-
-# Evaluate @ cross-validation threshold (Max F1)
-y_hat_f1 = (y_prob >= best_t_f1).astype(int)
-eval_classifier(yrf_test, y_hat_f1, y_prob, label=f"Random Forest (Max F1) = {best_t_f1:.2f}")
-
-# Evaluate @ min_recall
-y_hat_rec = (y_prob >= best_t_recall).astype(int)
-eval_classifier(yrf_test, y_hat_rec, y_prob, label=f"Random Forest (threshold = {best_t_recall:.2f}, picked by CV recall>=0.95)")
-
-# PLotting
-plot_roc(yrf_test, y_prob, title="Random Forest (Test)")
-
-# Feature importance
-gini_importance = pd.DataFrame({
-    "Feature": X_rf.columns,
-    "Importance": forest.feature_importances_
-}).sort_values("Importance", ascending=False)
-
-
-gini_importance = pd.DataFrame({
-    "Feature": X_rf.columns,
-    "Importance": forest.feature_importances_
-}).sort_values("Importance", ascending=False)
-
-print(f"\nFeature importance for (Gini)")
-print(gini_importance.head())
-
-# Permutation importance
-permute = permutation_importance(
+# Predictions!
+y_prob, y_hat, y_hat_f1, y_hat_recall = make_predictions(
     forest,
-    Xrf_test,
-    yrf_test,
-    scoring="roc_auc",
-    n_repeats=13,
-    random_state=73,
-    n_jobs=-1
+    X_test,
+    y_test
 )
 
-perm_df = pd.DataFrame({
-    "Feature": X_rf.columns,
-    "Importance": permute.importances_mean,
-    "Std": permute.importances_std
-}).sort_values("Importance", ascending=False)
-
-print("\nPermuation importance:")
-print(perm_df.head())
-
-# ========= Significance Testing ========
+# ======== Significance Test =============
 sig_test(cv_auc)
 
 

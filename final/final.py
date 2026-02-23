@@ -1,71 +1,5 @@
 #!/usr/bin/env python
-"""
-====================================================================================
-LUNG CANCER RISK PREDICTION DATASET — COLUMN REFERENCE
-====================================================================================
-Source: https://www.kaggle.com/datasets/dhrubangtalukdar/lung-cancer-prediction-dataset
-Rows:   5,000
-Cols:   30 (29 features + 1 target)
-All columns are integer-encoded.
-====================================================================================
-
-COLUMN                   TYPE        RANGE       DESCRIPTION
-------------------------------------------------------------------------------------
-DEMOGRAPHICS
-  age                    Continuous  18–90       Patient age in years
-  gender                 Binary      0, 1        0 = Female, 1 = Male
-  education_years        Continuous  5–20        Years of formal education
-  income_level           Ordinal     1–5         Socioeconomic bracket (1=lowest, 5=highest)
-
-SMOKING HISTORY
-  smoker                 Binary      0, 1        Current/former smoker flag
-  smoking_years          Continuous  0–52        Duration of smoking habit (years)
-  cigarettes_per_day     Continuous  0–44        Average daily cigarette consumption
-  pack_years             Continuous  0–60        (cigarettes_per_day / 20) × smoking_years
-  passive_smoking        Binary      0, 1        Regular secondhand smoke exposure
-
-ENVIRONMENTAL EXPOSURES
-  air_pollution_index    Continuous  20–130      Local air quality index (higher = worse)
-  occupational_exposure  Binary      0, 1        Workplace carcinogen exposure (dust, chemicals, etc.)
-  radon_exposure         Binary      0, 1        Residential radon gas exposure
-
-MEDICAL HISTORY
-  family_history_cancer  Binary      0, 1        First-degree relative with cancer
-  copd                   Binary      0, 1        Chronic Obstructive Pulmonary Disease diagnosis
-  asthma                 Binary      0, 1        Asthma diagnosis
-  previous_tb            Binary      0, 1        History of tuberculosis
-
-SYMPTOMS (⚠ potential data leakage — may be consequences, not causes)
-  chronic_cough          Binary      0, 1        Persistent cough present
-  chest_pain             Binary      0, 1        Chest pain present
-  shortness_of_breath    Binary      0, 1        Dyspnea present
-  fatigue                Binary      0, 1        Chronic fatigue present
-
-CLINICAL MEASUREMENTS
-  bmi                    Continuous  16–37       Body Mass Index (kg/m²)
-  oxygen_saturation      Continuous  85–100      SpO₂ percentage (normal ≥ 95%)
-  fev1_x10               Continuous  5–37        Forced Expiratory Volume in 1s × 10
-                                                 (divide by 10 for liters; normal ~3–4 L)
-  crp_level              Continuous  0–33        C-Reactive Protein (mg/L); inflammation marker
-  xray_abnormal          Binary      0, 1        Chest X-ray shows abnormality
-
-LIFESTYLE
-  exercise_hours_per_week Continuous 0–10        Weekly exercise hours
-  diet_quality           Ordinal     1–5         Self-reported diet quality (1=poor, 5=excellent)
-  alcohol_units_per_week Continuous  0–23        Weekly alcohol consumption (units)
-  healthcare_access      Ordinal     1–5         Access to healthcare services (1=poor, 5=excellent)
-
-TARGET
-  lung_cancer_risk       Binary      0, 1        0 = Low risk, 1 = High risk
-
-====================================================================================
-NOTES:
-- pack_years ≈ (cigarettes_per_day / 20) × smoking_years  → multicollinearity risk
-- Symptom columns may reflect existing disease, not just risk factors (leakage)
-- fev1_x10 is scaled by 10; divide by 10 for standard FEV1 in liters
-- All values are integers; no missing data present in raw file
-====================================================================================
-"""
+from textwrap import dedent
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -78,12 +12,86 @@ from matplotlib.patches import Rectangle
 import math
 import warnings
 from matplotlib import gridspec
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
+from model_metrics import summarize_model_performance
+from scipy.stats import ttest_ind, chi2_contingency
+from sklearn.ensemble import RandomForestClassifier
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 timestamp_alltimes_start = datetime.now()
 path = kagglehub.dataset_download("dhrubangtalukdar/lung-cancer-prediction-dataset")
 df = pd.read_csv(path + '/lung_cancer.csv', sep=',', na_values=" ?", skipinitialspace=True)
 TARGET = "lung_cancer_risk"
+
+# ====== Significance Tesing ========
+print("# ====== Significance Tesing ========")
+# Continuous/discrete features
+FEATURES_CONT = ["age", "pack_years", "oxygen_saturation"]
+FEATURES_DISC  = ["copd", "family_history_cancer", "chronic_cough", "shortness_of_breath"]
+
+# Low/HIgh risk data
+low = df[df[TARGET] == 0]
+hi = df[df[TARGET] == 1]
+
+# Iterate thru continuous/discrete features applying relevant tests
+for col in FEATURES_CONT:
+    x0 = low[col]
+    x1 = hi[col]
+
+    t, p = ttest_ind(x0, x1, equal_var=False)
+
+    print(dedent(f"""
+{col}\np = {p:.3f} 
+mean0 = {x0.mean():.3f}
+mean1 = {x1.mean():.3f}
+                 """))
+
+for col in FEATURES_DISC:
+    # build contignecy table
+    table = pd.crosstab(df[TARGET], df[col])
+    table = table.reindex(index=[0, 1], columns=[0, 1], fill_value=0)
+
+    # Independence test
+    chi2, p_val, dof, expect = chi2_contingency(table, correction=False)
+
+    # Proportions
+    lows = table.loc[0, 1] / table.loc[0].sum()
+    highs = table.loc[1, 1] / table.loc[1].sum()
+    
+    print(dedent(f"""
+{col}\np = {p_val:.3f}
+{'Significant' if p_val < 0.05 else 'Not significant'} 
+P({col}=1 | Low) = {lows:.3f}
+P({col}=1 | High) = {highs:.3f}
+                 """))
+
+print(dedent(f"""
+INTERPRETATION
+---------------
+For the CONTINUOUS features:
+
+AGE:
+HIgh risk patients are, on average, older
+(mean_high = {hi['age'].mean():.3f} vs
+mean_low = {low['age'].mean():.3f})
+p < 0.001, meaning a significant difference.
+
+PACK_YEARS:
+High risk patients typically have more years smoking.
+mean_high = {hi['pack_years'].mean():.3f}
+mean_low = {low['pack_years'].mean():.3f}
+p < 0.001, so smoking history has a strong association with risk.
+
+OXYGEN SATURATION:
+Lower oxygen saturation levels for high risk patients.
+mean_high = {hi['oxygen_saturation'].mean():.3f}
+mean_low = {low['oxygen_saturation'].mean():.3f}
+p < 0.001, which implies many things like, exercise matters.
+                 """))
 
 # =========== EDA =============
 print("======== Preview of Data ======== ")
@@ -113,7 +121,6 @@ CONTINUOUS_COLS = [
 ]
 
 # =========== Additional Descriptive Stats =============
-
 print("\n======== Descriptive Stats by Risk Class ========")
 grouped = df.groupby(TARGET)[CONTINUOUS_COLS].agg(["mean", "std", "median"])
 grouped_stacked = grouped.stack(level=0)
@@ -133,9 +140,7 @@ orange = "#ed7952"
 EDGE = "black"
 
 # =========== Plots =============
-
 # ---- Target Distribution ----
-
 fig, ax = plt.subplots(figsize=(6,6))
 sns.countplot(data=df, x='lung_cancer_risk', palette="rocket", ax=ax)
 total = len(df)
@@ -144,8 +149,8 @@ for p in ax.patches:
     percent = 100 * count / total
 
     ax.text(
-        p.get_x() + p.get_width()/2,   # x position
-        count + total*0.01,            # y position slightly above bar
+        p.get_x() + p.get_width()/2,
+        count + total*0.01,
         f"{count}\n({percent:.1f}%)",
         ha="center"
     )
@@ -157,23 +162,17 @@ ax.set_xlabel(" Lung Cancer Risk")
 ax.set_title("Target Variable Distribution")
 plt.tight_layout()
 #plt.show()
+print("\n\n\n")
 
 # ---- Proportion Mean Plots ----
-
 # Continuous features use the mean to show the average value per risk group.
 # Binary (0/1) features use the mean to show the proportion of 1s in each group.
-
-#imports
-import seaborn as sns
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 
 #use dark grid to match seaborn figures
 sns.set_style("dark")
 custom_palette = {0: "skyblue", 1: "navy"}
 
 #adding  grid to make it look like one figure
-
 #Sorting by demo, cont and bin (makes it look like 3 figure butits one )
 DEMO = ["age"]
 CONT = ["smoking_years", "oxygen_saturation", "fev1_x10"]
@@ -210,9 +209,9 @@ plt.tight_layout()
 fig.patch.set_edgecolor("black")
 fig.patch.set_linewidth(2)
 #plt.show()
+print("\n\n\n")
 
 # ---- Continuous Distributions By Class ----
-
 def features_by_target(df, column_plot, num_cols, w, h, title):
   sns.set(font_scale=1.2, style="dark")
   custom_palette = {0: 'skyblue', 1: 'navy'}
@@ -234,7 +233,7 @@ def features_by_target(df, column_plot, num_cols, w, h, title):
    elif values_list[i] == 'count':
      sns.countplot(data=df, x=keys_list[i], hue='lung_cancer_risk', palette="rocket", ax=ax)
    elif values_list[i] == 'box':
-     sns.boxplot(data=df, x=keys_list[i], hue='lung_cancer_risk', palette="crest", ax=ax);
+     sns.boxplot(data=df, x=keys_list[i], hue='lung_cancer_risk', palette="crest", ax=ax, gap=0.2);
    else:
      print('Incorrect plot type, please check if column_plot has hist, count or box plots only.')
    ax.set_xlabel(keys_list[i])
@@ -242,16 +241,20 @@ def features_by_target(df, column_plot, num_cols, w, h, title):
   fig.suptitle(title, fontsize=15, fontweight="bold", y=0.98)
   plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-column_plot = {'gender':'count','smoker':'count','copd': 'count', 'asthma':'count', 'chronic_cough':'count', 'shortness_of_breath':'count','age':'hist', 'smoking_years':'hist', 'oxygen_saturation': 'hist', 'fev1_x10': 'hist'}
+#Print Count and Histogram Plots
+column_plot = {'copd': 'count','chronic_cough':'count','shortness_of_breath':'count',
+               'family_history_cancer':'count','age':'hist', 'pack_years':'hist', 'oxygen_saturation': 'hist'}
 features_by_target(df, column_plot, 3, 20, 20, 'Distributions by Risk Class')
 #plt.show()
+print("\n\n\n")
 
-column_plot = {'oxygen_saturation':'box', 'smoking_years':'box', 'fev1_x10':'box'}
+#Print Box Plots
+column_plot = {'oxygen_saturation':'box', 'pack_years':'box', 'age':'box'}
 features_by_target(df, column_plot, 3, 14, 6, 'Outlier Observation by Risk Class')
 #plt.show()
+print("\n\n\n")
 
 # ---- Correlation Heatmap ----
-
 #(Shpaner & Gil, 2024)
 df_num = df.select_dtypes(np.number)
 flex_corr_matrix(
@@ -272,11 +275,13 @@ flex_corr_matrix(
     cbar_label="Correlation Index",
     triangular=True,
 )
+print("\n\n\n")
 
-# ---- Feature Correlations with Target ----
-narrowed_df = df[["age", "gender", "smoker", "smoking_years", "copd", "asthma", "chronic_cough", "shortness_of_breath", "oxygen_saturation", "fev1_x10", "lung_cancer_risk"]]
+# ---- Narrowed Down Correlations with Target ----
+narrowed_df = df[["age", "pack_years", "copd", "family_history_cancer",
+                  "chronic_cough", "shortness_of_breath", "oxygen_saturation", "lung_cancer_risk"]]
 corr = narrowed_df.corr()
-fig, ax = plt.subplots(figsize=(10, 8))
+fig, ax = plt.subplots(figsize=(8, 6))
 target_corr = corr[TARGET].drop(TARGET).sort_values()
 colors = [purple if v > 0 else orange for v in target_corr.values]
 ax.barh(target_corr.index, target_corr.values, color=colors, edgecolor=EDGE)
@@ -286,8 +291,101 @@ ax.set_title("Feature Correlations with Target",
 ax.axvline(0, color="black", linewidth=0.8)
 plt.tight_layout()
 #plt.show()
+print("\n\n\n")
 
 timestamp_alltimes_end = datetime.now()
-print(f"\033[1;32mTotal Execution time: {timestamp_alltimes_end - timestamp_alltimes_start}\n")
+print(f"\033[1;32mTotal Execution time for EDA: {timestamp_alltimes_end - timestamp_alltimes_start}\n")
 
 
+timestamp_logistic_start = datetime.now()
+
+#Define the independent and dependent variables
+X = df[['age','pack_years','copd','family_history_cancer','chronic_cough', 'shortness_of_breath','oxygen_saturation']]
+y = df[TARGET]
+
+#Split the data into train and test sets: 80:20
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+#Generate a pipeline to scale the data using a standard scaler and fit the logistic regression model
+pipe = Pipeline([("scaler", StandardScaler()),("logreg", LogisticRegression())])
+model1 = pipe.fit(X_train, y_train)
+
+#Calculate the prediction and probability of the dependent variable
+y_pred1 = pipe.predict(X_test)
+y_prob1 = pipe.predict_proba(X_test)[:, 1]
+
+#Print model metrics
+#(Shpaner & Gil, 2024)
+print("Accuracy:", accuracy_score(y_test, y_pred1))
+
+timestamp_logistic_end = datetime.now()
+print(f"\033[1;32mTotal Execution time for Logistic Regression Model: {timestamp_logistic_end - timestamp_logistic_start}\n")
+
+print("Confusion Matrix:", confusion_matrix(y_test, y_pred1))
+
+#Predicting the risk for a 30 yo patient with pack years of 20, no COPD or
+#family history of cancer or shortness of breath, existing chronic cough
+# and oxgen saturation of 98.
+patient = pd.DataFrame([{
+    'age': 30,
+    'pack_years': 20,
+    'copd': 0,
+    'family_history_cancer': 0,
+    'chronic_cough': 1,
+    'shortness_of_breath': 0,
+    'oxygen_saturation' : 98
+}])
+
+risk_prob = pipe.predict_proba(patient)[0][1]
+print("Predicted risk:", round(risk_prob,2))
+
+timestamp_forest_start = datetime.now()
+
+def rf_model(random_state=73):
+    """
+    Baseline Random Forest model
+    """
+    return RandomForestClassifier(
+        # Number of Decision trees in forest (500)
+        n_estimators=500,
+        # n_samples / (n_classes * np.bincount(y))
+        class_weight="balanced",
+        # NO depth limit
+        max_depth=None,
+        # Subset fo features to consider for best split: sqrt(n_features)
+        max_features="sqrt",
+        # Minimum number of samples to split (internal node)
+        min_samples_split = 2,
+        # Samples on right/left branch required for each leaf node
+        min_samples_leaf=5, # 5 was chosen to reduce variance (default=1)
+        # Random seed for reproducibility
+        random_state=73,
+        # Out-of-bag score for estimates generalization w/out using test data
+        oob_score=True,
+        # Use all CPU cores
+        n_jobs=-1
+    )
+
+# Fitting Random Forest Classifier
+# Unlike Logistic Regression, scaling is NOT required because trees split on thresholds so feature magnitudes don't affect the splits.
+forest = rf_model()
+model2 = forest.fit(X_train, y_train)
+y_pred2 = forest.predict(X_test)
+y_prob2 = forest.predict_proba(X_test)[:, 1]
+print("Accuracy:", accuracy_score(y_test, y_pred2))
+
+timestamp_forest_end = datetime.now()
+print(f"\033[1;32mTotal Execution time for Random Forest Model: {timestamp_forest_end - timestamp_forest_start}\n")
+
+model_titles = ["Logistic Regression", "Random Forest"]
+
+model_performance = summarize_model_performance(
+    model=[model1, model2],
+    model_title=model_titles,
+    X=X_test,
+    y=y_test,
+    model_type="classification",
+    return_df=True
+)
+
+model_performance
