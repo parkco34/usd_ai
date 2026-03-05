@@ -1,25 +1,30 @@
 #!/usr/bin/env python
-from textwrap import dedent
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-import kagglehub
-import time
+# !pip install eda_toolkit
+# !pip install model_metrics
 from datetime import datetime
 from eda_toolkit import flex_corr_matrix
-import seaborn as sns
-from matplotlib.patches import Rectangle
+import kagglehub
 import math
-import warnings
 from matplotlib import gridspec
+from matplotlib.patches import Rectangle
+import matplotlib.pyplot as plt
+from model_metrics import summarize_model_performance
+from model_metrics import show_roc_curve
+from model_metrics import show_confusion_matrix
+import numpy as np
+import pandas as pd
+from scipy.stats import norm
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
-from model_metrics import summarize_model_performance
 from scipy.stats import ttest_ind, chi2_contingency
-from sklearn.ensemble import RandomForestClassifier
+from textwrap import dedent
+import time
+import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 timestamp_alltimes_start = datetime.now()
@@ -27,71 +32,6 @@ path = kagglehub.dataset_download("dhrubangtalukdar/lung-cancer-prediction-datas
 df = pd.read_csv(path + '/lung_cancer.csv', sep=',', na_values=" ?", skipinitialspace=True)
 TARGET = "lung_cancer_risk"
 
-# ====== Significance Tesing ========
-print("# ====== Significance Tesing ========")
-# Continuous/discrete features
-FEATURES_CONT = ["age", "pack_years", "oxygen_saturation"]
-FEATURES_DISC  = ["copd", "family_history_cancer", "chronic_cough", "shortness_of_breath"]
-
-# Low/HIgh risk data
-low = df[df[TARGET] == 0]
-hi = df[df[TARGET] == 1]
-
-# Iterate thru continuous/discrete features applying relevant tests
-for col in FEATURES_CONT:
-    x0 = low[col]
-    x1 = hi[col]
-
-    t, p = ttest_ind(x0, x1, equal_var=False)
-
-    print(dedent(f"""
-{col}\np = {p:.3f} 
-mean0 = {x0.mean():.3f}
-mean1 = {x1.mean():.3f}
-                 """))
-
-for col in FEATURES_DISC:
-    # build contignecy table
-    table = pd.crosstab(df[TARGET], df[col])
-    table = table.reindex(index=[0, 1], columns=[0, 1], fill_value=0)
-
-    # Independence test
-    chi2, p_val, dof, expect = chi2_contingency(table, correction=False)
-
-    # Proportions
-    lows = table.loc[0, 1] / table.loc[0].sum()
-    highs = table.loc[1, 1] / table.loc[1].sum()
-    
-    print(dedent(f"""
-{col}\np = {p_val:.3f}
-{'Significant' if p_val < 0.05 else 'Not significant'} 
-P({col}=1 | Low) = {lows:.3f}
-P({col}=1 | High) = {highs:.3f}
-                 """))
-
-print(dedent(f"""
-INTERPRETATION
----------------
-For the CONTINUOUS features:
-
-AGE:
-HIgh risk patients are, on average, older
-(mean_high = {hi['age'].mean():.3f} vs
-mean_low = {low['age'].mean():.3f})
-p < 0.001, meaning a significant difference.
-
-PACK_YEARS:
-High risk patients typically have more years smoking.
-mean_high = {hi['pack_years'].mean():.3f}
-mean_low = {low['pack_years'].mean():.3f}
-p < 0.001, so smoking history has a strong association with risk.
-
-OXYGEN SATURATION:
-Lower oxygen saturation levels for high risk patients.
-mean_high = {hi['oxygen_saturation'].mean():.3f}
-mean_low = {low['oxygen_saturation'].mean():.3f}
-p < 0.001, which implies many things like, exercise matters.
-                 """))
 
 # =========== EDA =============
 print("======== Preview of Data ======== ")
@@ -161,7 +101,7 @@ ax.set_xticklabels(["Low Risk (0)", "High Risk (1)"])
 ax.set_xlabel(" Lung Cancer Risk")
 ax.set_title("Target Variable Distribution")
 plt.tight_layout()
-#plt.show()
+plt.show()
 print("\n\n\n")
 
 # ---- Proportion Mean Plots ----
@@ -208,7 +148,7 @@ plt.tight_layout()
 # Add border around entire figure
 fig.patch.set_edgecolor("black")
 fig.patch.set_linewidth(2)
-#plt.show()
+plt.show()
 print("\n\n\n")
 
 # ---- Continuous Distributions By Class ----
@@ -245,13 +185,13 @@ def features_by_target(df, column_plot, num_cols, w, h, title):
 column_plot = {'copd': 'count','chronic_cough':'count','shortness_of_breath':'count',
                'family_history_cancer':'count','age':'hist', 'pack_years':'hist', 'oxygen_saturation': 'hist'}
 features_by_target(df, column_plot, 3, 20, 20, 'Distributions by Risk Class')
-#plt.show()
+plt.show()
 print("\n\n\n")
 
 #Print Box Plots
 column_plot = {'oxygen_saturation':'box', 'pack_years':'box', 'age':'box'}
 features_by_target(df, column_plot, 3, 14, 6, 'Outlier Observation by Risk Class')
-#plt.show()
+plt.show()
 print("\n\n\n")
 
 # ---- Correlation Heatmap ----
@@ -290,14 +230,80 @@ ax.set_title("Feature Correlations with Target",
              fontsize=14, fontweight="bold")
 ax.axvline(0, color="black", linewidth=0.8)
 plt.tight_layout()
-#plt.show()
+plt.show()
 print("\n\n\n")
 
 timestamp_alltimes_end = datetime.now()
 print(f"\033[1;32mTotal Execution time for EDA: {timestamp_alltimes_end - timestamp_alltimes_start}\n")
 
-
 timestamp_logistic_start = datetime.now()
+
+# ====== Significance Tesing ========
+print("# ====== Significance Tesing ========")
+# Continuous/discrete features
+FEATURES_CONT = ["age", "pack_years", "oxygen_saturation"]
+FEATURES_DISC  = ["copd", "family_history_cancer", "chronic_cough", "shortness_of_breath"]
+
+# Low/HIgh risk data
+low = df[df[TARGET] == 0]
+hi = df[df[TARGET] == 1]
+
+# Iterate thru continuous/discrete features applying relevant tests
+for col in FEATURES_CONT:
+    x0 = low[col]
+    x1 = hi[col]
+
+    t, p = ttest_ind(x0, x1, equal_var=False)
+
+    print(dedent(f"""
+{col}\np = {p:.3f}
+mean0 = {x0.mean():.3f}
+mean1 = {x1.mean():.3f}
+                 """))
+
+for col in FEATURES_DISC:
+    # build contignecy table
+    table = pd.crosstab(df[TARGET], df[col])
+    table = table.reindex(index=[0, 1], columns=[0, 1], fill_value=0)
+
+    # Independence test
+    chi2, p_val, dof, expect = chi2_contingency(table, correction=False)
+
+    # Proportions
+    lows = table.loc[0, 1] / table.loc[0].sum()
+    highs = table.loc[1, 1] / table.loc[1].sum()
+
+    print(dedent(f"""
+{col}\np = {p_val:.3f}
+{'Significant' if p_val < 0.05 else 'Not significant'}
+P({col}=1 | Low) = {lows:.3f}
+P({col}=1 | High) = {highs:.3f}
+                 """))
+
+print(dedent(f"""
+INTERPRETATION
+---------------
+For the CONTINUOUS features:
+
+AGE:
+HIgh risk patients are, on average, older
+(mean_high = {hi['age'].mean():.3f} vs
+mean_low = {low['age'].mean():.3f})
+p < 0.001, meaning a significant difference.
+
+PACK_YEARS:
+High risk patients typically have more years smoking.
+mean_high = {hi['pack_years'].mean():.3f}
+mean_low = {low['pack_years'].mean():.3f}
+p < 0.001, so smoking history has a strong association with risk.
+
+OXYGEN SATURATION:
+Lower oxygen saturation levels for high risk patients.
+mean_high = {hi['oxygen_saturation'].mean():.3f}
+mean_low = {low['oxygen_saturation'].mean():.3f}
+p < 0.001, which implies many things like, exercise matters.
+                 """))
+
 
 #Define the independent and dependent variables
 X = df[['age','pack_years','copd','family_history_cancer','chronic_cough', 'shortness_of_breath','oxygen_saturation']]
@@ -315,13 +321,10 @@ y_pred1 = pipe.predict(X_test)
 y_prob1 = pipe.predict_proba(X_test)[:, 1]
 
 #Print model metrics
-#(Shpaner & Gil, 2024)
 print("Accuracy:", accuracy_score(y_test, y_pred1))
 
 timestamp_logistic_end = datetime.now()
 print(f"\033[1;32mTotal Execution time for Logistic Regression Model: {timestamp_logistic_end - timestamp_logistic_start}\n")
-
-print("Confusion Matrix:", confusion_matrix(y_test, y_pred1))
 
 #Predicting the risk for a 30 yo patient with pack years of 20, no COPD or
 #family history of cancer or shortness of breath, existing chronic cough
@@ -377,6 +380,23 @@ print("Accuracy:", accuracy_score(y_test, y_pred2))
 timestamp_forest_end = datetime.now()
 print(f"\033[1;32mTotal Execution time for Random Forest Model: {timestamp_forest_end - timestamp_forest_start}\n")
 
+#Predicting the risk for a 30 yo patient with pack years of 20, no COPD or
+#family history of cancer or shortness of breath, existing chronic cough
+# and oxgen saturation of 98.
+patient = pd.DataFrame([{
+    'age': 30,
+    'pack_years': 20,
+    'copd': 0,
+    'family_history_cancer': 0,
+    'chronic_cough': 1,
+    'shortness_of_breath': 0,
+    'oxygen_saturation' : 98
+}])
+
+risk_prob = forest.predict_proba(patient)[0][1]
+print("Predicted risk:", round(risk_prob,2))
+
+#(Shpaner, 2025)
 model_titles = ["Logistic Regression", "Random Forest"]
 
 model_performance = summarize_model_performance(
@@ -389,3 +409,38 @@ model_performance = summarize_model_performance(
 )
 
 model_performance
+
+#Confusion matrix
+#(Shpaner, 2025)
+show_confusion_matrix(
+    model=[model1, model2],
+    X=X_test,
+    y=y_test,
+    model_title=model_titles,
+    cmap="Blues",
+    text_wrap=20,
+    subplots=True,
+    n_cols=2,
+    n_rows=1,
+    figsize=(6, 6),
+)
+
+#ROC Curve
+#(Shpaner, 2025)
+show_roc_curve(
+    model=[model1, model2],
+    X=X_test,
+    y=y_test,
+    model_title=model_titles,
+    decimal_places=2,
+    n_cols=2,
+    n_rows=1,
+    curve_kwgs={
+        "Logistic Regression": {"color": "blue", "linewidth": 2},
+        "Random Forest": {"color": "black", "linewidth": 2},
+    },
+    linestyle_kwgs={"color": "red", "linestyle": "--"},
+    subplots=True,
+)
+
+
