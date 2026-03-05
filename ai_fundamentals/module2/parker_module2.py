@@ -101,6 +101,8 @@ G = ox.graph_from_place(PLACE_NAME, network_type=NETWORK_TYPE)
 # Nodes
 origin_node = ox.distance.nearest_nodes(G, X=origin[1], Y=origin[0])
 dest_node = ox.distance.nearest_nodes(G, X=destination[1], Y=destination[0])
+
+
 dijkstra_route = nx.shortest_path(
     G, 
     source=origin_node, 
