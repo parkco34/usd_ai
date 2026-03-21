@@ -31,8 +31,9 @@ def data_entropy(y):
     """
     total = len(y)
     probabilities = y.value_counts() / total # Outputs pd.Series of probs
+    entropy = -sum([p * log2(p) for p in probabilities if p > 0])
 
-    return -sum([p * log2(p) for p in probabilities if p > 0])
+    return entropy
 
 def attribute_entropy(X, y, attribute):
     """
