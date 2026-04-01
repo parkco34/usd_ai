@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#!/usr/bin/env python
 """
 Predicts whether student will pass class based on whether the student works, is
 taking other online coures, or has a background in Computer Science, Math, or
@@ -31,9 +32,8 @@ def data_entropy(y):
     """
     total = len(y)
     probabilities = y.value_counts() / total # Outputs pd.Series of probs
-    entropy = -sum([p * log2(p) for p in probabilities if p > 0])
 
-    return entropy
+    return -sum([p * log2(p) for p in probabilities if p > 0])
 
 def attribute_entropy(X, y, attribute):
     """
@@ -343,7 +343,8 @@ def visualize_tree(tree, node_name='root', graph=None):
 
     return graph
 
-# -------------------------------------------------------------------------------------------------------------------------
+
+
 #+++++++++++++
 #EXAMPLE USAGE:
 #+++++++++++++
@@ -356,8 +357,6 @@ test_data = {"Other online courses": "Y", "Student background": "Maths", "Workin
 prediction = predict(cleaned_tree, test_data)
 print(f"The predicted class is: {prediction}")
 
-# Visualization
+# Usage:
 graph = visualize_tree(cleaned_tree)
 graph.render('decision_tree', format='png', cleanup=True)
-# -------------------------------------------------------------------------------------------------------------------------
-

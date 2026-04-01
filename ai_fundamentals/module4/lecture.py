@@ -29,12 +29,12 @@ df['species'] = df['target'].map(lambda x: target_names[x])
 
 sns.pairplot(df, hue="species")
 plt.suptitle("Pairplot of Iris Features", y=1.02)
-plt.show()
+#plt.show()
 
 plt.figure(figsize=(8, 6))
 sns.heatmap(X.corr(), annot=True, cmap='coolwarm')
 plt.title("Feature Correlation Heatmap")
-plt.show()
+#plt.show()
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42,stratify=y)
 
@@ -58,3 +58,4 @@ coeff_df['class'] = target_names
 print("\nFeature Coefficients per Class:")
 print(coeff_df)
 
+breakpoint()
