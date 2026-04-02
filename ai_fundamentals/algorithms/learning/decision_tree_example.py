@@ -444,22 +444,36 @@ def predict_one(node, x, feat_names):
         # Get value from x (row) at the index position
         value = x[feat_idx]
 
+        
         # Ensure value is in node for matching a child node value
         if value in node.kids.keys():
             # replace current node with child node
             node = node.kids[value]
 
         else:
-            # return MODE
+            # return MODE if key not in child node
             return node.majority_class
 
     return node.prediction
 
-def predict_all(node):
+def predict_all(root_node, X, feat_names):
     """
+    Predicts class labels for each row in the feature space.
+    =======================================================
+    HOW
+    ===
+    List comprehension calling predict_one on each row of the feature space, wrapping it in np.array() to ensure the returning datatype is a numpy array.
+    It makes easier to compare against y for ACCURACY.
+    --------------------------------------------------
+    INPUT:
+        root_node: (Node class) Root of trained decision tree
+        X: (np.ndarray) Feature space
+        feat_names: (list of str) Original column names
 
+    OUPUT:
+        predictions: (np.ndarray) Array of predictions per row of feature space
     """
-    pass
+    return np.asarray([predict_one(root_node, x, feat_names) for x in X])
 
         
 
@@ -473,11 +487,14 @@ X, y = split_convert(df)
 feat_names = list(df.columns[:-1])
 root_node = build_tree(X, y, feat_names)
 
+# Output tree
 # This will show the work in the order the computer does it (depth-first)
 #print(f"Root Node: {root_node}")
-
 # Proper output of decision tree
 print_tree(root_node)
 
+# Make predictions
+predictions = predict_all(root_node, X, feat_names) # FIX ??
+print(f"\nPredictions: {predictions}")
 
-breakpoint()
+#breakpoint()
