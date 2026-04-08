@@ -1,0 +1,162 @@
+# Backpropagation Algorithm: Implementation Guide
+
+## The Algorithm (Pseudocode)
+
+```
+BACKPROP_NETWORK(X, y, architecture, η, epochs)
+
+    1. INITIALIZE weights and biases for each layer
+    2. FOR each epoch:
+        a. FORWARD PASS:
+           For l = 1 to L:
+               z[l] = W[l] @ a[l-1] + b[l]
+               a[l] = g(z[l])
+           where a[0] = X
+
+        b. COMPUTE LOSS:
+           L = -(1/m) * sum( y*ln(a[L]) + (1-y)*ln(1-a[L]) )
+
+        c. BACKWARD PASS:
+           δ[L] = a[L] - y
+           For l = L-1 down to 1:
+               δ[l] = (W[l+1]ᵀ @ δ[l+1]) ⊙ g'(z[l])
+
+        d. COMPUTE GRADIENTS:
+           For l = 1 to L:
+               dW[l] = (1/m) * δ[l] @ a[l-1]ᵀ
+               db[l] = (1/m) * sum(δ[l], across samples)
+
+        e. UPDATE PARAMETERS:
+           For l = 1 to L:
+               W[l] = W[l] - η * dW[l]
+               b[l] = b[l] - η * db[l]
+
+    3. RETURN trained W, b
+```
+
+---
+
+## Step-by-Step Conceptual Implementation Guide
+
+### Step 1: Decide Your Data Shapes
+
+Before writing a single line of logic, get the matrix dimensions straight. Everything in this implementation flows from shape conventions.
+
+Your input $X$ has shape `(n_features, m_samples)`. Note: this is the **transposed** convention from what pandas gives you. Columns are samples, rows are features. This choice makes the matrix multiplications $W \cdot X$ work without extra transposes in the forward pass.
+
+For a network with layer sizes `[n_input, n_hidden, n_output]`:
+- $W^{(1)}$ has shape `(n_hidden, n_input)`
+- $b^{(1)}$ has shape `(n_hidden, 1)`
+- $W^{(2)}$ has shape `(n_output, n_hidden)`
+- $b^{(2)}$ has shape `(n_output, 1)`
+
+The general rule: $W^{(l)}$ has shape `(neurons_in_l, neurons_in_l-1)`. Each row is one neuron's incoming weight vector.
+
+**Your task:** Write a function that takes a list of layer sizes and returns dictionaries of initialized $W$ and $b$ for each layer. Use He initialization: random normal scaled by $\sqrt{2 / n_{in}}$. Initialize biases to zero.
+
+---
+
+### Step 2: Build the Activation Functions
+
+You need two functions and their derivatives:
+
+**ReLU** (for hidden layers):
+$$g(z) = \max(0, z)$$
+$$g'(z) = \begin{cases} 1 & z > 0 \\ 0 & z \leq 0 \end{cases}$$
+
+**Sigmoid** (for output layer, binary classification):
+$$\sigma(z) = \frac{1}{1 + e^{-z}}$$
+$$\sigma'(z) = \sigma(z)(1 - \sigma(z))$$
+
+**Your task:** Implement each as a pair of functions — forward and derivative. The derivative of ReLU should return a matrix of 1s and 0s the same shape as $z$. Think about what numpy operation produces a boolean mask and how to cast it.
+
+---
+
+### Step 3: Forward Pass
+
+This is the simplest part conceptually. You're just pushing data through the network layer by layer.
+
+For each layer $l$:
+1. Compute the linear combination: $z^{(l)} = W^{(l)} a^{(l-1)} + b^{(l)}$
+2. Apply activation: $a^{(l)} = g(z^{(l)})$
+
+**Critical detail:** You must **cache** every $z^{(l)}$ and $a^{(l)}$ during the forward pass. The backward pass needs all of them. If you don't store them, you'd have to recompute the entire forward pass during backprop.
+
+**Your task:** Write the forward pass as a loop over layers. Store $z$ and $a$ values in a dictionary keyed by layer number. Use ReLU for all hidden layers and sigmoid for the final layer. The input $X$ is $a^{(0)}$ — store that too.
+
+---
+
+### Step 4: Compute the Loss
+
+Binary cross-entropy, vectorized over $m$ samples:
+
+$$\mathcal{L} = -\frac{1}{m} \sum_{i=1}^{m} \left[ y_i \ln(\hat{y}_i) + (1 - y_i) \ln(1 - \hat{y}_i) \right]$$
+
+**Numerical stability note:** $\ln(0)$ is $-\infty$. If your sigmoid ever outputs exactly 0.0 or 1.0 (which floating point can produce for large $|z|$), you'll get `nan`. Clip your predictions to a range like $[10^{-8}, \, 1 - 10^{-8}]$ before taking the log.
+
+**Your task:** Implement the loss function. Think about which numpy function computes element-wise log and how `np.sum` with division by $m$ gives you the scalar loss.
+
+---
+
+### Step 5: Backward Pass — Output Layer
+
+The error signal at the output:
+
+$$\delta^{(L)} = a^{(L)} - y$$
+
+That's it for the output layer. This clean form comes from the cross-entropy + sigmoid combination, as we derived earlier. Shape: `(n_output, m_samples)` — same shape as $a^{(L)}$.
+
+---
+
+### Step 6: Backward Pass — Hidden Layers
+
+For each layer $l$ from $L-1$ down to 1:
+
+$$\delta^{(l)} = \left( W^{(l+1)^\top} \delta^{(l+1)} \right) \odot g'(z^{(l)})$$
+
+Think about what each operation does dimensionally:
+- $W^{(l+1)^\top}$ has shape `(neurons_in_l, neurons_in_l+1)` — it projects the error from the layer above back down
+- $\delta^{(l+1)}$ has shape `(neurons_in_l+1, m)` — the error signal you already computed
+- Their product has shape `(neurons_in_l, m)` — error distributed to each neuron in layer $l$
+- $g'(z^{(l)})$ has shape `(neurons_in_l, m)` — the gate
+- $\odot$ is element-wise multiplication — same shape out
+
+**Your task:** Implement this as a reverse loop. At each layer, pull $W^{(l+1)}$, $\delta^{(l+1)}$, and $z^{(l)}$ from your caches, compute $\delta^{(l)}$, and store it.
+
+---
+
+### Step 7: Compute Gradients
+
+For every layer, once you have $\delta^{(l)}$:
+
+$$\frac{\partial \mathcal{L}}{\partial W^{(l)}} = \frac{1}{m} \delta^{(l)} \left(a^{(l-1)}\right)^\top$$
+
+$$\frac{\partial \mathcal{L}}{\partial b^{(l)}} = \frac{1}{m} \sum_{i=1}^{m} \delta^{(l)}_i$$
+
+The $\frac{1}{m}$ averages over samples. The bias gradient sums across the sample axis (axis=1, keepdims=True) because $b$ is shared across all samples.
+
+**Your task:** Compute `dW` and `db` for each layer. Check that `dW[l]` has the same shape as `W[l]` and `db[l]` has the same shape as `b[l]`. If they don't, you have a matrix multiplication in the wrong order.
+
+---
+
+### Step 8: Update Parameters
+
+Standard gradient descent:
+
+$$W^{(l)} \leftarrow W^{(l)} - \eta \cdot dW^{(l)}$$
+$$b^{(l)} \leftarrow b^{(l)} - \eta \cdot db^{(l)}$$
+
+---
+
+### Step 9: Training Loop
+
+Wrap steps 3–8 in an epoch loop. Print the loss every N epochs to monitor convergence.
+
+---
+
+## Debugging Checklist (In Priority Order)
+
+1. **Shape mismatches** — print the shape of every intermediate tensor on your first run. Most bugs are shape bugs.
+2. **Gradient checking** — for a single weight $w$, compute the numerical gradient: $\frac{\mathcal{L}(w + \epsilon) - \mathcal{L}(w - \epsilon)}{2\epsilon}$ with $\epsilon = 10^{-7}$. Compare to your analytical gradient. They should agree to ~$10^{-5}$ relative error. This is slow but it's the definitive test.
+3. **Overfit a tiny dataset first** — take 10 samples. Your network should drive the loss to near zero. If it can't memorize 10 examples, something is wrong in the math before you even think about generalization.
+4. **Loss should decrease monotonically** at small learning rates. If it oscillates wildly, $\eta$ is too large. If it barely moves, $\eta$ is too small or gradients are vanishing.
