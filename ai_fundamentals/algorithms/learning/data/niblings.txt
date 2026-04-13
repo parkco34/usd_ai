@@ -1,0 +1,21 @@
+Name,Grades,Crying Weekly,Work Ethic,Screen Time,Books Read Monthly,Homework Score,Gay
+Hunter,Bad,Low,Low,High,1,F,Yes
+Hunter,Bad,Low,Low,High,1,D,Yes
+Hunter,Bad,Low,Low,High,1,F,Yes
+Hunter,Bad,Low,Low,High,1,F,Yes
+Hunter,Good,Low,Medium,High,2,D,No
+Alex,Good,Medium,High,Medium,3,A,No
+Alex,Good,Low,High,Medium,3,A,No
+Alex,Good,Medium,Medium,Medium,2,B,No
+Alex,Good,Low,High,Low,3,A,No
+Alex,Good,Medium,High,Medium,3,B,No
+Harper,Good,High,High,Low,3,B,No
+Harper,Good,Medium,High,Low,2,B,No
+Harper,Bad,High,Medium,Low,3,C,No
+Harper,Good,Medium,High,Low,3,B,No
+Harper,Bad,High,Medium,Low,2,C,Yes
+River,Bad,High,Low,High,1,F,Yes
+River,Bad,High,Low,High,1,F,Yes
+River,Bad,High,Low,High,1,F,Yes
+River,Bad,High,Low,High,1,F,Yes
+River,Bad,High,Low,High,1,F,Yes

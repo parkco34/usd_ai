@@ -352,7 +352,7 @@ def plot_roc(y_test, y_score):
     )
     plt.plot([0, 1], [0, 1], color="yellow", linestyle="--", label="No-skill baseline")
 
-    plt.title("Reciever Operating Characteristic")
+    plt.title("Receiver Operating Characteristic")
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.legend(loc="lower right")
