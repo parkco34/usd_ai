@@ -54,9 +54,38 @@ def read_file(path):
     else:
         return pd.read_csv(path)
 
-def split_convert(dataframe):
+def encode_categoricals(data, verbose=False):
+    """
+    Encodes categorical data into binary 0/1's
+    ----------------------------------------
+    INPUT:
+        data: (array-like) Data with values to convert to 0/1's
+
+    OUTPUT:
+        encoded_data: (array-like)
+    """
+    # Ensure only two values in array
+    uniques, counts =  np.unique(data, return_counts=True)
+    
+    if len(uniques) > 2:
+        raise TypeError("\nCannot encode to binary type given the data given!")
+
+    # Mapping
+    mapping = {uniques[0]: 0, uniques[1]: 1}
+
+    # IMplement mapping
+    encoded_data = np.array([mapping[val] for val in data])
+
+    if verbose:
+        print(f"Uniques: {uniques}")
+        print(f"Mapping: {mapping}")
+
+    return encoded_data
+
+def split_convert(dataframe, encode=False):
     """
     Split data into X and y (features and target) and converts to numpy arrays.
+    Optionally encodes categorical data to binary.
     -------------------------------------------------
     INPUT:
         dataframe: (pd.DataFrame) Dataset
@@ -66,6 +95,10 @@ def split_convert(dataframe):
     """
     X = np.array(dataframe[dataframe.columns[:-1]])    
     y = np.array(dataframe[dataframe.columns[-1]])
+    
+    if encode:
+        # Encode target feature
+        y = encode_categoricals(y)
 
     return X, y
 
@@ -97,6 +130,8 @@ def avg_child_entropy(X, y, feat_idx):
     For each unique value of the feature:
         weight = |subset| / |total|
         sum += weight * H(subset)
+
+        ? --> Why weight the child values (why AVERAGE?)
     --------------------------------------------------
     INPUT:
         X: (np.ndarray) Features
@@ -105,6 +140,29 @@ def avg_child_entropy(X, y, feat_idx):
     OUTPUT:
         weighted_kid_entropy: (float)
     """
+    # Initialize child weighted entropy
+    weighted_kid_entropy = 0.0
+
+    # Feature values
+    feature_vals = X[:, feat_idx].astype(str)
+    
+    # Iterate thru values for weighted child entropy
+    for val in np.unique(feature_vals):
+        # Create mask for filtering target values
+        mask = feature_vals == val
+
+        # Create subset for entropy calculation
+        y_subset = y[mask]
+   
+        # Weigh the little bastards
+        weight = len(y_subset) / len(y)
+
+        # Average child entropy
+        weighted_kid_entropy += weight * parent_entropy(y_subset)
+
+    print(f"Bastards entropy: {weighted_kid_entropy:.3f}") 
+
+    return weighted_kid_entropy
 
 def info_gain(X, y, feat_idx):
     """
@@ -118,10 +176,14 @@ def info_gain(X, y, feat_idx):
     OUTPUT:
         information_gain: (float)
     """
+    return parent_entropy(y) - avg_child_entropy(X, y, feat_idx)
 
 def best_split_ig(X, y, feat_names):
     """
     Select the feature with the largest information gain.
+    -------------------------------------------
+    HOW: ?
+
     -------------------------------------------
     INPUT:
         X: (np.ndarray) Features
@@ -152,6 +214,7 @@ class Node(object):
     Leaf nodes store prediction and is_leaf=True.
     """
     pass
+
 
 def build_tree(X, y, feat_names):
     """
@@ -223,9 +286,13 @@ def predict_all(root_node, X, feat_names):
 def main():
     PATH = "data/niblings.txt"
     df = read_file(PATH)
-    X, y = split_convert(df)
-    mama_entropy = parent_entropy(y)
+    X, y = split_convert(df, encode=True)
+    data_entropy = parent_entropy(y)
 
+    kids = avg_child_entropy(X, y, 0)
+    # Info gain
+    information_gain = info_gain(X, y, 0)
+    
 
     breakpoint()
 
